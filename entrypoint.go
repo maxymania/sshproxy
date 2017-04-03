@@ -26,26 +26,29 @@ SOFTWARE.
 package sshproxy
 
 import "golang.org/x/crypto/ssh"
+import "log"
 
 func channel(nc ssh.NewChannel){
+	log.Println("NewChannel",nc.ChannelType())
 	switch(nc.ChannelType()){
 	case conn_req1: ch_connect(nc)
 	}
 	nc.Reject(ssh.UnknownChannelType,"Unknown channel type!")
 }
 func request(r *ssh.Request){
+	log.Println("Request",r.Type)
 	switch(r.Type){
 	case dns_req1: rq_dns1(r)
 	}
 	if r.WantReply { r.Reply(false,nil) }
 }
 
-func channel2(nc <-chan ssh.NewChannel){
+func channel2(conn ssh.Conn,nc <-chan ssh.NewChannel){
 	for n := range nc {
 		go channel(n)
 	}
 }
-func request2(reqs <-chan *ssh.Request){
+func request2(conn ssh.Conn,reqs <-chan *ssh.Request){
 	for r := range reqs {
 		go request(r)
 	}
@@ -55,8 +58,9 @@ func request2(reqs <-chan *ssh.Request){
 var Level int = 4
 
 func Handle(conn ssh.Conn, nc <-chan ssh.NewChannel, reqs <-chan *ssh.Request){
-	go channel2(nc)
-	go request2(reqs)
+	log.Println("Handle New Connection")
+	go channel2(conn,nc)
+	go request2(conn,reqs)
 }
 
 func DevNullRequest(reqs <-chan *ssh.Request){

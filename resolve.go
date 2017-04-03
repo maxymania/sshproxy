@@ -56,7 +56,7 @@ func rq_dns1(r *ssh.Request){
 	}
 	if cr.Hotness<Level {
 		cr.Hotness++
-		b,e := asn1.Marshal(&cr)
+		b,e := asn1.Marshal(cr)
 		if e!=nil {
 			r.Reply(false,nil)
 			return
@@ -81,7 +81,7 @@ func rq_dns1(r *ssh.Request){
 func Resolve(name string) (net.IP, error){
 	cr := dnsRequest1{ name, 1 }
 	
-	b,e := asn1.Marshal(&cr)
+	b,e := asn1.Marshal(cr)
 	if e!=nil { return nil,e }
 	
 	cl := selClient()
