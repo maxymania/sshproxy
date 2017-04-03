@@ -1,2 +1,2 @@
 # sshproxy
-SSH based proxying
+SSH based proxying (Proxy mix cascade)
