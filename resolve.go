@@ -29,8 +29,9 @@ import "golang.org/x/crypto/ssh"
 import "encoding/asn1"
 import "net"
 import "errors"
+import "log"
 
-const dns_req1 = "connrequestv1"
+const dns_req1 = "dnsrequestv1"
 
 type dnsRequest1 struct{
 	Name    string
@@ -51,6 +52,7 @@ func rq_dns1(r *ssh.Request){
 	var cr dnsRequest1
 	_,e := asn1.Unmarshal(r.Payload,&cr)
 	if e!=nil {
+		log.Println("asn1.Unmarshal",e)
 		r.Reply(false,nil)
 		return
 	}
@@ -58,24 +60,31 @@ func rq_dns1(r *ssh.Request){
 		cr.Hotness++
 		b,e := asn1.Marshal(cr)
 		if e!=nil {
+			log.Println("asn1.Marshal",e)
 			r.Reply(false,nil)
 			return
 		}
 		cl := selClient()
 		if cl==nil {
+			log.Println("No Client!")
 			r.Reply(false,nil)
 			return
 		}
-		ok,data,_ := cl.send(dns_req1,true,b)
+		ok,data,e := cl.send(dns_req1,true,b)
+		if !ok {
+			log.Println("cl.send",dns_req1,ok,data,e)
+		}
 		r.Reply(ok,data)
 		return
 	}
 	addr, e := net.ResolveIPAddr("ip", cr.Name)
 	if e!=nil {
+		log.Println("net.ResolveIPAddr:",cr.Name,e)
 		r.Reply(false,nil)
 		return
 	}
-	r.Reply(true,[]byte(addr.IP))
+	e = r.Reply(true,[]byte(addr.IP))
+	log.Println("r.Reply",true,addr.IP,e)
 }
 
 func Resolve(name string) (net.IP, error){
@@ -85,10 +94,11 @@ func Resolve(name string) (net.IP, error){
 	if e!=nil { return nil,e }
 	
 	cl := selClient()
-	if cl!=nil { return nil,errors.New("No client!") }
+	if cl==nil { return nil,errors.New("No client!") }
 	
-	ok,data,_ := cl.send(dns_req1,true,b)
+	ok,data,e := cl.send(dns_req1,true,b)
 	if !ok {
+		log.Println("resolve:",ok,data,e)
 		if e==nil { e = errors.New("No such name!") }
 		return nil,e
 	}

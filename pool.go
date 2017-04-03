@@ -55,8 +55,6 @@ func (c *Client) getConn() (ssh.Conn,error){
 		c.conn = st
 		c.nc = snc
 		c.reqs = sr
-		DevNullRequest(sr)
-		DevNullChannel(snc)
 		go c.handler()
 		return st,nil
 	}
