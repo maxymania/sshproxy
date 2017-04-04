@@ -25,49 +25,44 @@ SOFTWARE.
 
 package sshproxy
 
-import "golang.org/x/crypto/ssh"
-import "log"
+import "io"
+import "crypto/cipher"
+import "golang.org/x/crypto/sha3"
 
-func channel(nc ssh.NewChannel){
-	log.Println("NewChannel",nc.ChannelType())
-	switch(nc.ChannelType()){
-	case conn_req1: ch_connect(nc)
-	case conn_req2: ch_connect2(nc)
-	case dns_req1: ch_dns1(nc)
-	}
-	nc.Reject(ssh.UnknownChannelType,"Unknown channel type!")
-}
-func request(r *ssh.Request){
-	log.Println("Request",r.Type)
-	if r.WantReply { r.Reply(false,nil) }
-}
 
-func channel2(conn ssh.Conn,nc <-chan ssh.NewChannel){
-	for n := range nc {
-		go channel(n)
-	}
+type keyStream struct{
+	r io.Reader
+	buf []byte
+	pos, max int
 }
-func request2(conn ssh.Conn,reqs <-chan *ssh.Request){
-	for r := range reqs {
-		go request(r)
+func (k *keyStream) XORKeyStream(dst, src []byte){
+	var e error
+	for i,n := 0, len(src); i<n; i++ {
+		if k.pos >= k.max {
+			k.pos = 0
+			k.max,e = k.r.Read(k.buf)
+			if e!=nil { panic(e) }
+		}
+		dst[i] = src[i] ^ k.buf[k.pos]
+		k.pos++
 	}
 }
 
-
-var Level int = 4
-
-func Handle(conn ssh.Conn, nc <-chan ssh.NewChannel, reqs <-chan *ssh.Request){
-	log.Println("Handle New Connection")
-	go channel2(conn,nc)
-	go request2(conn,reqs)
+func createCipher(key []byte) cipher.Stream {
+	s := sha3.NewShake256()
+	s.Write(key)
+	ks := new(keyStream)
+	ks.r = s
+	ks.buf = make([]byte,1<<13)
+	ks.pos = 0
+	ks.max = 0
+	return ks
 }
 
-func DevNullRequest(reqs <-chan *ssh.Request){
-	for r := range reqs { if r.WantReply { r.Reply(false,nil) } }
-}
-
-
-func DevNullChannel(nc <-chan ssh.NewChannel){
-	for c := range nc { c.Reject(ssh.Prohibited,"no") }
+type multiStream []cipher.Stream
+func (m multiStream) XORKeyStream(dst, src []byte) {
+	for _,k := range m {
+		k.XORKeyStream(dst,src)
+	}
 }
 

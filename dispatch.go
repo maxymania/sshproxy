@@ -69,7 +69,33 @@ func ch_proxy_copyin(src io.Reader,dst ssh.Channel){
 		}
 	}
 }
+func ch_proxy_copyin2(src io.Reader,dst io.Writer, ch ssh.Channel){
+	b := make([]byte,1<<13)
+	for {
+		n,e := src.Read(b)
+		if e==io.EOF {
+			ch.CloseWrite()
+			return
+		}
+		if n>0 {
+			dst.Write(b[:n])
+		}
+	}
+}
 func ch_proxy_copyout(src ssh.Channel,dst io.WriteCloser){
+	b := make([]byte,1<<13)
+	for {
+		n,e := src.Read(b)
+		if e==io.EOF {
+			dst.Close()
+			return
+		}
+		if n>0 {
+			dst.Write(b[:n])
+		}
+	}
+}
+func ch_proxy_copyout2(src io.Reader,dst io.WriteCloser){
 	b := make([]byte,1<<13)
 	for {
 		n,e := src.Read(b)
