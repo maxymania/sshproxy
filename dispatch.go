@@ -82,3 +82,13 @@ func ch_proxy_copyout(src ssh.Channel,dst io.WriteCloser){
 		}
 	}
 }
+
+func ch_proxy_eat(src io.Reader){
+	b := make([]byte,1<<13)
+	for {
+		_,e := src.Read(b)
+		if e==io.EOF {
+			return
+		}
+	}
+}

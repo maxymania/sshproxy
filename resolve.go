@@ -30,6 +30,7 @@ import "encoding/asn1"
 import "net"
 import "errors"
 import "log"
+import "io"
 
 const dns_req1 = "dnsrequestv1"
 
@@ -48,12 +49,25 @@ Hotness:
 	...
 */
 
-func rq_dns1(r *ssh.Request){
+func ch_dns1(nc ssh.NewChannel){
+	msg := make([]byte,16+1)
+	msg[0] = 0
+	
+	/* Open Client. */
+	ch2,rq2,e := nc.Accept()
+	if e!=nil {
+		log.Println("nc.Accept",e)
+		return
+	}
+	go DevNullRequest(rq2)
+	go ch_proxy_eat(ch2) /* Eat Client Input. */
+	
 	var cr dnsRequest1
-	_,e := asn1.Unmarshal(r.Payload,&cr)
+	_,e = asn1.Unmarshal(nc.ExtraData(),&cr)
 	if e!=nil {
 		log.Println("asn1.Unmarshal",e)
-		r.Reply(false,nil)
+		ch2.Write(msg)
+		ch2.CloseWrite()
 		return
 	}
 	if cr.Hotness<Level {
@@ -61,30 +75,42 @@ func rq_dns1(r *ssh.Request){
 		b,e := asn1.Marshal(cr)
 		if e!=nil {
 			log.Println("asn1.Marshal",e)
-			r.Reply(false,nil)
+			ch2.Write(msg)
+			ch2.CloseWrite()
 			return
 		}
 		cl := selClient()
 		if cl==nil {
-			log.Println("No Client!")
-			r.Reply(false,nil)
+			msg[0] = 200
+			log.Println("No Client")
+			ch2.Write(msg)
+			ch2.CloseWrite()
 			return
 		}
-		ok,data,e := cl.send(dns_req1,true,b)
-		if !ok {
-			log.Println("cl.send",dns_req1,ok,data,e)
+		
+		ch,rq,e := cl.open(dns_req1,b)
+		if e!=nil {
+			msg[0] = 200
+			log.Println("cl.open",dns_req1,e)
+			ch2.Write(msg)
+			ch2.CloseWrite()
+			return
 		}
-		r.Reply(ok,data)
+		go DevNullRequest(rq)
+		go ch_proxy_copy(ch,ch2) /* Copy Server Input to Client Output */
+		ch.CloseWrite() /* Close Server Output */
 		return
 	}
+	
 	addr, e := net.ResolveIPAddr("ip", cr.Name)
 	if e!=nil {
-		log.Println("net.ResolveIPAddr:",cr.Name,e)
-		r.Reply(false,nil)
-		return
+	}else{
+		IPB := []byte(addr.IP)
+		msg[0] = byte(len(IPB))
+		copy(msg[1:],IPB)
 	}
-	e = r.Reply(true,[]byte(addr.IP))
-	log.Println("r.Reply",true,addr.IP,e)
+	ch2.Write(msg)
+	ch2.CloseWrite()
 }
 
 func Resolve(name string) (net.IP, error){
@@ -96,18 +122,27 @@ func Resolve(name string) (net.IP, error){
 	cl := selClient()
 	if cl==nil { return nil,errors.New("No client!") }
 	
-	ok,data,e := cl.send(dns_req1,true,b)
-	if !ok {
-		log.Println("resolve:",ok,data,e)
-		if e==nil { e = errors.New("No such name!") }
+	ch,rq,e := cl.open(dns_req1,b)
+	if e!=nil {
+		log.Println("resolve:",e)
 		return nil,e
 	}
-	switch len(data) {
-	case 4,16:break
-	default:
-		return nil,errors.New("invalid length!")
+	go DevNullRequest(rq)
+	msg := make([]byte,16+1)
+	_,e = io.ReadFull(ch,msg)
+	if e!=nil {
+		log.Println("resolve:",e)
+		return nil,e
 	}
 	
-	return net.IP(data),e
+	switch msg[0] {
+	case 0: return nil,errors.New("No such name!")
+	case 200: return nil,errors.New("Network Problems!")
+	case 4,16:break
+	default:
+		return nil,errors.New("Unknown error!")
+	}
+	
+	return net.IP(msg[1:][:msg[0]]),e
 }
 

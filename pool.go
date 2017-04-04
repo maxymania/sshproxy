@@ -29,6 +29,7 @@ import "math/rand"
 import "golang.org/x/crypto/ssh"
 import "net"
 import "io"
+import "sync"
 
 type Client struct{
 	Client ssh.ClientConfig
@@ -38,6 +39,7 @@ type Client struct{
 	conn ssh.Conn
 	nc <-chan ssh.NewChannel
 	reqs <-chan *ssh.Request
+	mutex sync.Mutex
 }
 func (c *Client) handler(){
 	go DevNullChannel(c.nc)
@@ -46,6 +48,8 @@ func (c *Client) handler(){
 	c.err = io.EOF
 }
 func (c *Client) getConn() (ssh.Conn,error){
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	if c.err!=nil || c.conn==nil {
 		co,e := net.Dial(c.Net,c.Addr)
 		if e!=nil { return nil,e }
@@ -62,12 +66,12 @@ func (c *Client) getConn() (ssh.Conn,error){
 }
 func (c *Client) send(name string, wantReply bool, payload []byte) (bool, []byte, error) {
 	cc,e := c.getConn()
-	if e!=nil { return false,nil,e }
+	if e!=nil { c.err = e; return false,nil,e }
 	return cc.SendRequest(name,wantReply,payload)
 }
 func (c *Client) open(ct string, data []byte) (ch ssh.Channel, rq <-chan *ssh.Request, er error) {
 	cc,e := c.getConn()
-	if e!=nil { er=e; return }
+	if e!=nil { c.err = e; er=e; return }
 	return cc.OpenChannel(ct,data)
 }
 

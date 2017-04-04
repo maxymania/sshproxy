@@ -7,6 +7,7 @@ import "github.com/maxymania/sshproxy"
 import "golang.org/x/crypto/ssh"
 import "flag"
 import "net"
+import "log"
 
 /*
 -----BEGIN EC PRIVATE KEY-----
@@ -70,7 +71,7 @@ func server1(){
 	sshproxy.Add(&Client)
 	conf := &socks5.Config{}
 	conf.Dial = mydialer
-	//conf.Resolver = resolver{}
+	conf.Resolver = resolver{}
 	
 	server, err := socks5.New(conf)
 	if err != nil {
@@ -139,6 +140,10 @@ func main(){
 	case 3:  server3()
 	case 4:  server4()
 	case 5:  server5()
+	case 11:
+		Client.Addr = "127.0.0.1:8001"
+		sshproxy.Add(&Client)
+		log.Println(sshproxy.Resolve("de.wikipedia.org"))
 	
 	case 10:  server10()
 	default: flag.PrintDefaults()

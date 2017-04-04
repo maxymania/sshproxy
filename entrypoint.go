@@ -32,14 +32,12 @@ func channel(nc ssh.NewChannel){
 	log.Println("NewChannel",nc.ChannelType())
 	switch(nc.ChannelType()){
 	case conn_req1: ch_connect(nc)
+	case dns_req1: ch_dns1(nc)
 	}
 	nc.Reject(ssh.UnknownChannelType,"Unknown channel type!")
 }
 func request(r *ssh.Request){
 	log.Println("Request",r.Type)
-	switch(r.Type){
-	case dns_req1: rq_dns1(r)
-	}
 	if r.WantReply { r.Reply(false,nil) }
 }
 
