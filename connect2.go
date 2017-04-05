@@ -237,6 +237,8 @@ func Old2Dial(netw, addr string) (net.Conn,error) {
 	var cr connRequest2
 	var cx connHdr2S
 	
+	if !AllowInsecure { return nil, errors.New("Insecure Operation") }
+	
 	rm,e := net.ResolveTCPAddr(netw,addr)
 	if e!=nil { return nil,e }
 	

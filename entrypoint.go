@@ -27,12 +27,20 @@ package sshproxy
 
 import "golang.org/x/crypto/ssh"
 
+var AllowInsecure = false
+
 func channel(nc ssh.NewChannel){
-	switch(nc.ChannelType()){
-	case conn_req1: ch_connect(nc)
-	case conn_req2: ch_connect2(nc)
-	case any_req1:  ch_anyproto1(nc)
-	case dns_req1: ch_dns1(nc)
+	if AllowInsecure {
+		switch(nc.ChannelType()){
+		case conn_req1: ch_connect(nc)
+		case conn_req2: ch_connect2(nc)
+		case any_req1:  ch_anyproto1(nc)
+		case dns_req1: ch_dns1(nc)
+		}
+	}else{
+		switch(nc.ChannelType()){
+		case any_req1:  ch_anyproto1(nc)
+		}
 	}
 	nc.Reject(ssh.UnknownChannelType,"Unknown channel type!")
 }

@@ -140,6 +140,8 @@ func (m *myconn) SetWriteDeadline(t time.Time) error { return nil }
 /* Old, 'insecure' connect. */
 func OldDial(netw, addr string) (net.Conn,error) {
 	var cr connRequest1
+	if !AllowInsecure { return nil, errors.New("Insecure Operation") }
+	
 	cr.Net  = []byte(netw)
 	cr.Addr = []byte(addr)
 	cr.Hotness = 1
