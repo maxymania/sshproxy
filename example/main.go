@@ -2,8 +2,8 @@ package main
 
 import "github.com/armon/go-socks5"
 
-import "golang.org/x/net/context"
 import "github.com/maxymania/sshproxy"
+import "github.com/maxymania/sshproxy/proxy"
 import "golang.org/x/crypto/ssh"
 import "flag"
 import "net"
@@ -41,18 +41,6 @@ var Server ssh.ServerConfig
 
 var server = flag.Int("server", 0, "server")
 
-func mydialer(ctx context.Context, network, addr string) (net.Conn, error) {
-	return sshproxy.Dial(network,addr)
-}
-
-type resolver struct{}
-func (r resolver) Resolve(ctx context.Context, name string) (context.Context, net.IP, error) {
-	i,e := sshproxy.Resolve(name)
-	return ctx,i,e
-}
-
-
-
 func server10(){
 	conf := &socks5.Config{}
 	server, err := socks5.New(conf)
@@ -69,9 +57,7 @@ func server10(){
 func server1(){
 	Client.Addr = "127.0.0.1:8001"
 	sshproxy.Add(&Client)
-	conf := &socks5.Config{}
-	conf.Dial = mydialer
-	conf.Resolver = resolver{}
+	conf := proxy.Config()
 	
 	server, err := socks5.New(conf)
 	if err != nil {

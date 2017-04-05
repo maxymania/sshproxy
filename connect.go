@@ -137,6 +137,7 @@ func (m *myconn) SetDeadline     (t time.Time) error { return nil }
 func (m *myconn) SetReadDeadline (t time.Time) error { return nil }
 func (m *myconn) SetWriteDeadline(t time.Time) error { return nil }
 
+/* Old, 'insecure' connect. */
 func OldDial(netw, addr string) (net.Conn,error) {
 	var cr connRequest1
 	cr.Net  = []byte(netw)

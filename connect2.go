@@ -43,10 +43,10 @@ type connRequest2 struct{
 	Level   uint8
 }
 
-type connHeader2 struct{
-	Len uint8
-	T int8
-	K [256]byte
+type connHdr2S struct{
+	Port uint16
+	T uint8
+	IP [16]byte
 }
 
 func ch_connect2(nc ssh.NewChannel){
@@ -116,22 +116,23 @@ func ch_connect2(nc ssh.NewChannel){
 		return
 	}
 	
-	var msg connHeader2
+	var cx connHdr2S
 	
-	e = binary.Read(ech2, binary.BigEndian,&msg)
+	e = binary.Read(ech2, binary.BigEndian,&cx)
 	if e!=nil {
 		log.Println("binary.Read",e)
 		ch2.Close()
 		return
 	}
 	
-	netw := "tcp"
+	if cx.T>16 { cx.T = 16 }
 	
-	if msg.T==4 { netw = "tcp4" }
-	if msg.T==6 { netw = "tcp6" }
-	addr := string(msg.K[:msg.Len])
+	var coadr net.TCPAddr
 	
-	conn,err := net.Dial(netw,addr)
+	coadr.IP = net.IP(cx.IP[:cx.T])
+	coadr.Port = int(cx.Port)
+	
+	conn,err := net.DialTCP("tcp",nil,&coadr)
 	if err!=nil {
 		log.Println("net.Dial",err)
 		ech2.Write([]byte{0xff})
@@ -159,16 +160,15 @@ func (m *myconn2) SetWriteDeadline(t time.Time) error { return nil }
 
 func Dial(netw, addr string) (net.Conn,error) {
 	var cr connRequest2
-	var cc connHeader2
+	var cx connHdr2S
 	
-	switch netw{
-	case "tcp":cc.T = 0
-	case "tcp4":cc.T = 4
-	case "tcp6":cc.T = 6
-	}
-	if len(addr)>255 { return nil, errors.New("Address too long!") }
-	cc.Len = byte(len(addr))
-	copy(cc.K[:],[]byte(addr))
+	rm,e := net.ResolveTCPAddr(netw,addr)
+	if e!=nil { return nil,e }
+	
+	IPb := []byte(rm.IP)
+	cx.T = uint8(len(IPb))
+	cx.Port = uint16(rm.Port)
+	copy(cx.IP[:],IPb)
 	
 	cr.Hotness = 1
 	cr.Level = uint8(Level)
@@ -192,7 +192,7 @@ func Dial(netw, addr string) (net.Conn,error) {
 		return nil,e
 	}
 	
-	e = binary.Write(ech,binary.BigEndian,cc)
+	e = binary.Write(ech,binary.BigEndian,cx)
 	if e!=nil {
 		log.Println("Dial2: binary.Write",e)
 		ech.Close()
@@ -208,7 +208,6 @@ func Dial(netw, addr string) (net.Conn,error) {
 	}
 	
 	lo,_ := net.ResolveTCPAddr("tcp","localhost:54321")
-	rm,_ := net.ResolveTCPAddr("tcp",addr)
 	
 	go DevNullRequest(rq)
 	return &myconn2{ech,ech,ch,lo,rm},nil

@@ -22,47 +22,30 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+/* SOCKS 5 binding for sshproxy. */
+package proxy
 
-package sshproxy
+import "github.com/armon/go-socks5"
+import "golang.org/x/net/context"
+import "github.com/maxymania/sshproxy"
+import "net"
 
-import "io"
-import "crypto/cipher"
-import "golang.org/x/crypto/sha3"
-
-
-type keyStream struct{
-	r io.Reader
-	buf []byte
-	pos, max int
-}
-func (k *keyStream) XORKeyStream(dst, src []byte){
-	var e error
-	for i,n := 0, len(src); i<n; i++ {
-		if k.pos >= k.max {
-			k.pos = 0
-			k.max,e = k.r.Read(k.buf)
-			if e!=nil { panic(e) }
-		}
-		dst[i] = src[i] ^ k.buf[k.pos]
-		k.pos++
-	}
+func mydialer(ctx context.Context, network, addr string) (net.Conn, error) {
+	return sshproxy.Dial(network,addr)
 }
 
-func createCipher(key []byte) cipher.Stream {
-	s := sha3.NewShake256()
-	s.Write(key)
-	ks := new(keyStream)
-	ks.r = s
-	ks.buf = make([]byte,1<<13)
-	ks.pos = 0
-	ks.max = 0
-	return ks
+type resolver struct{}
+func (r resolver) Resolve(ctx context.Context, name string) (context.Context, net.IP, error) {
+	i,e := sshproxy.Resolve(name)
+	return ctx,i,e
 }
-
-type multiStream []cipher.Stream
-func (m multiStream) XORKeyStream(dst, src []byte) {
-	for _,k := range m {
-		k.XORKeyStream(dst,src)
-	}
+func Config() *socks5.Config{
+	conf := &socks5.Config{}
+	conf.Dial = mydialer
+	conf.Resolver = resolver{}
+	pc := &socks5.PermitCommand{}
+	pc.EnableConnect = true
+	conf.Rules = pc
+	return conf
 }
 
