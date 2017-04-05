@@ -110,8 +110,10 @@ func Initiator(srv io.ReadWriteCloser) (io.ReadWriteCloser,error){
 	},nil
 }
 
-/* Intermediate station function to start a session.
-If an error is returned, please close the connections, otherwise, don't. */
+/*
+Intermediate station function to start a session.
+If an error is returned, please close the connections, otherwise, don't.
+*/
 func Intermediate(clt io.ReadWriteCloser,srv io.ReadWriteCloser) error{
 	const (
 		SALT = iota
