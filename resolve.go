@@ -113,7 +113,8 @@ func ch_dns1(nc ssh.NewChannel){
 	ch2.CloseWrite()
 }
 
-func Resolve(name string) (net.IP, error){
+/* Old, 'insecure' resolve */
+func OldResolve(name string) (net.IP, error){
 	cr := dnsRequest1{ name, 1 }
 	
 	b,e := asn1.Marshal(cr)

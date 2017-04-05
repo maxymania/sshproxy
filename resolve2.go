@@ -25,46 +25,59 @@ SOFTWARE.
 
 package sshproxy
 
+import "github.com/davecgh/go-xdr/xdr2"
 import "golang.org/x/crypto/ssh"
+import "net"
+import "errors"
+import "log"
+import "io"
 
-func channel(nc ssh.NewChannel){
-	switch(nc.ChannelType()){
-	case conn_req1: ch_connect(nc)
-	case conn_req2: ch_connect2(nc)
-	case any_req1:  ch_anyproto1(nc)
-	case dns_req1: ch_dns1(nc)
+func ap1_resolve(ech2 io.ReadWriteCloser, ch2 ssh.Channel){
+	enc := xdr.NewEncoder(ech2)
+	dec := xdr.NewDecoder(ech2)
+	s,_,e := dec.DecodeString()
+	if e!=nil {
+		log.Println("xdr2.DecodeString",e)
+		ch2.Close()
+		return
 	}
-	nc.Reject(ssh.UnknownChannelType,"Unknown channel type!")
-}
-func request(r *ssh.Request){
-	if r.WantReply { r.Reply(false,nil) }
-}
-
-func channel2(conn ssh.Conn,nc <-chan ssh.NewChannel){
-	for n := range nc {
-		go channel(n)
+	
+	addr, e := net.ResolveIPAddr("ip", s)
+	if e!=nil {
+		enc.EncodeBool(false)
+		enc.EncodeOpaque(make([]byte,16))
+	}else{
+		enc.EncodeBool(true)
+		enc.EncodeOpaque([]byte(addr.IP))
 	}
+	ch2.Close()
 }
-func request2(conn ssh.Conn,reqs <-chan *ssh.Request){
-	for r := range reqs {
-		go request(r)
+
+func Resolve(name string) (net.IP, error){
+	ech2,e := chopen_anyproto1(ap_resolve)
+	if e!=nil { return nil,e }
+	
+	enc := xdr.NewEncoder(ech2)
+	dec := xdr.NewDecoder(ech2)
+	
+	_,e = enc.EncodeString(name)
+	if e!=nil { return nil,e }
+	
+	ok,_,e := dec.DecodeBool()
+	if e!=nil { return nil,e }
+	ipa,_,e := dec.DecodeOpaque()
+	if e!=nil { return nil,e }
+	
+	ech2.Close()
+	
+	if !ok {
+		return nil,errors.New("No such name!")
 	}
-}
-
-
-var Level int = 4
-
-func Handle(conn ssh.Conn, nc <-chan ssh.NewChannel, reqs <-chan *ssh.Request){
-	go channel2(conn,nc)
-	go request2(conn,reqs)
-}
-
-func DevNullRequest(reqs <-chan *ssh.Request){
-	for r := range reqs { if r.WantReply { r.Reply(false,nil) } }
-}
-
-
-func DevNullChannel(nc <-chan ssh.NewChannel){
-	for c := range nc { c.Reject(ssh.Prohibited,"no") }
+	
+	switch len(ipa) {
+	case 4,16: return net.IP(ipa),e
+	default: return nil,errors.New("Invalid IP address format!")
+	}
+	panic("unreachable")
 }
 

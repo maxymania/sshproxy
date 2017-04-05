@@ -23,48 +23,23 @@ SOFTWARE.
 */
 
 
-package sshproxy
+package anyproto
 
-import "golang.org/x/crypto/ssh"
+import "math/rand"
 
-func channel(nc ssh.NewChannel){
-	switch(nc.ChannelType()){
-	case conn_req1: ch_connect(nc)
-	case conn_req2: ch_connect2(nc)
-	case any_req1:  ch_anyproto1(nc)
-	case dns_req1: ch_dns1(nc)
-	}
-	nc.Reject(ssh.UnknownChannelType,"Unknown channel type!")
-}
-func request(r *ssh.Request){
-	if r.WantReply { r.Reply(false,nil) }
+type request struct{
+	B [32]byte
 }
 
-func channel2(conn ssh.Conn,nc <-chan ssh.NewChannel){
-	for n := range nc {
-		go channel(n)
-	}
-}
-func request2(conn ssh.Conn,reqs <-chan *ssh.Request){
-	for r := range reqs {
-		go request(r)
-	}
+func (r *request) init(b byte) {
+	read(r.B[:])
+	for _,c := range r.B { b ^= c }
+	r.B[rand.Intn(32)] ^= b
 }
 
-
-var Level int = 4
-
-func Handle(conn ssh.Conn, nc <-chan ssh.NewChannel, reqs <-chan *ssh.Request){
-	go channel2(conn,nc)
-	go request2(conn,reqs)
-}
-
-func DevNullRequest(reqs <-chan *ssh.Request){
-	for r := range reqs { if r.WantReply { r.Reply(false,nil) } }
-}
-
-
-func DevNullChannel(nc <-chan ssh.NewChannel){
-	for c := range nc { c.Reject(ssh.Prohibited,"no") }
+func (r *request) decode() byte {
+	b := byte(0)
+	for _,c := range r.B { b ^= c }
+	return b
 }
 

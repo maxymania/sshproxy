@@ -23,48 +23,23 @@ SOFTWARE.
 */
 
 
-package sshproxy
+package anyproto
 
-import "golang.org/x/crypto/ssh"
+import "sync"
+import "crypto/rand"
+import "golang.org/x/crypto/sha3"
 
-func channel(nc ssh.NewChannel){
-	switch(nc.ChannelType()){
-	case conn_req1: ch_connect(nc)
-	case conn_req2: ch_connect2(nc)
-	case any_req1:  ch_anyproto1(nc)
-	case dns_req1: ch_dns1(nc)
-	}
-	nc.Reject(ssh.UnknownChannelType,"Unknown channel type!")
+var lck sync.Mutex
+
+var sh sha3.ShakeHash
+
+func init(){
+	var b [256]byte
+	sh = sha3.NewShake256()
+	rand.Read(b[:])
+	sh.Write(b[:])
 }
-func request(r *ssh.Request){
-	if r.WantReply { r.Reply(false,nil) }
+func read(b []byte){
+	lck.Lock(); defer lck.Unlock()
+	sh.Read(b)
 }
-
-func channel2(conn ssh.Conn,nc <-chan ssh.NewChannel){
-	for n := range nc {
-		go channel(n)
-	}
-}
-func request2(conn ssh.Conn,reqs <-chan *ssh.Request){
-	for r := range reqs {
-		go request(r)
-	}
-}
-
-
-var Level int = 4
-
-func Handle(conn ssh.Conn, nc <-chan ssh.NewChannel, reqs <-chan *ssh.Request){
-	go channel2(conn,nc)
-	go request2(conn,reqs)
-}
-
-func DevNullRequest(reqs <-chan *ssh.Request){
-	for r := range reqs { if r.WantReply { r.Reply(false,nil) } }
-}
-
-
-func DevNullChannel(nc <-chan ssh.NewChannel){
-	for c := range nc { c.Reject(ssh.Prohibited,"no") }
-}
-

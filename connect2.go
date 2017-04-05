@@ -35,6 +35,7 @@ import "io"
 import "time"
 
 import "github.com/maxymania/sshproxy/scrambler"
+import "github.com/maxymania/sshproxy/anyproto"
 
 const conn_req2 = "connrequestv2"
 
@@ -134,12 +135,42 @@ func ch_connect2(nc ssh.NewChannel){
 	
 	conn,err := net.DialTCP("tcp",nil,&coadr)
 	if err!=nil {
-		log.Println("net.Dial",err)
+		log.Println("net.DialTCP",err)
 		ech2.Write([]byte{0xff})
 		ech2.Close()
 		return
 	}
 	ech2.Write([]byte{0})
+	
+	go ch_proxy_copyin2(conn,ech2,ch2)
+	go ch_proxy_copyout2(ech2,conn)
+}
+
+func ap1_connect(ech2 io.ReadWriteCloser, ch2 ssh.Channel){
+	var cx connHdr2S
+	
+	e := binary.Read(ech2, binary.BigEndian,&cx)
+	if e!=nil {
+		log.Println("binary.Read",e)
+		ch2.Close()
+		return
+	}
+	
+	if cx.T>16 { cx.T = 16 }
+	
+	var coadr net.TCPAddr
+	
+	coadr.IP = net.IP(cx.IP[:cx.T])
+	coadr.Port = int(cx.Port)
+	
+	conn,err := net.DialTCP("tcp",nil,&coadr)
+	if err!=nil {
+		log.Println("net.DialTCP",err)
+		anyproto.EncodeOneByteMessage(ech2,apc_err)
+		ech2.Close()
+		return
+	}
+	anyproto.EncodeOneByteMessage(ech2,apc_ok)
 	
 	go ch_proxy_copyin2(conn,ech2,ch2)
 	go ch_proxy_copyout2(ech2,conn)
@@ -159,6 +190,50 @@ func (m *myconn2) SetReadDeadline (t time.Time) error { return nil }
 func (m *myconn2) SetWriteDeadline(t time.Time) error { return nil }
 
 func Dial(netw, addr string) (net.Conn,error) {
+	var cx connHdr2S
+	
+	rm,e := net.ResolveTCPAddr(netw,addr)
+	if e!=nil { return nil,e }
+	
+	IPb := []byte(rm.IP)
+	cx.T = uint8(len(IPb))
+	cx.Port = uint16(rm.Port)
+	copy(cx.IP[:],IPb)
+	
+	ech,e := chopen_anyproto1(ap_conn)
+	if e!=nil { return nil,e }
+	
+	e = binary.Write(ech,binary.BigEndian,cx)
+	if e!=nil {
+		log.Println("Dial3: binary.Write",e)
+		ech.Close()
+		return nil,e
+	}
+	
+	cty,e := anyproto.DecodeOneByteMessage(ech)
+	if e!=nil {
+		log.Println("Dial3: anyproto.DecodeOneByteMessage",e)
+		ech.Close()
+		return nil,e
+	}
+	
+	if cty == apc_err {
+		ech.Close()
+		return nil,errors.New("Connection Failed/Refused!")
+	}
+	if cty != apc_ok {
+		ech.Close()
+		return nil,errors.New("Unknown error!")
+	}
+	lo := new(net.TCPAddr)
+	lo.Port = 54321
+	lo.IP = net.IP{128,0,0,1}
+	
+	return &myconn2{ech,ech,ech,lo,rm},nil
+}
+
+/* Old, 'less secure' connect. */
+func Old2Dial(netw, addr string) (net.Conn,error) {
 	var cr connRequest2
 	var cx connHdr2S
 	
@@ -209,7 +284,6 @@ func Dial(netw, addr string) (net.Conn,error) {
 	
 	lo,_ := net.ResolveTCPAddr("tcp","localhost:54321")
 	
-	go DevNullRequest(rq)
 	return &myconn2{ech,ech,ch,lo,rm},nil
 }
 
