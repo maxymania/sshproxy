@@ -22,7 +22,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-
+/*
+ Multi-Hop Anonymization Protocol for one connection. This Protocol uses
+ the public key function Curve25519 and the cipher Twofish in Counter Mode.
+ A Session consists of two end points (Client and Server) and zero or more
+ Intermediate stations. The Intermediate station scrambles the key-exchange
+ handshake without braking it and it scrambles the communicated data without
+ breaking it. The Intermediate station's input and output can not be associated
+ with each other (to identify a Session), except with a 256-bit brute force attack.
+*/
 package scrambler
 
 import "io"
@@ -57,8 +65,8 @@ func (w *wrapper) Close() error{
 	return w.C.Close()
 }
 
+/* Client side function to start a session. */
 func Initiator(srv io.ReadWriteCloser) (io.ReadWriteCloser,error){
-	
 	var t [3][32]byte
 	var r CryptoRecord
 	
@@ -79,17 +87,20 @@ func Initiator(srv io.ReadWriteCloser) (io.ReadWriteCloser,error){
 	//------------------------------------------------------------
 	
 	iv := []byte(ivC2S)
+	eiv := make([]byte,16)
 	c2s := make(multiStream,3)
 	for i := range r.Array {
 		c,_ := twofish.NewCipher(r.Array[i][:])
-		c2s[i] = cipher.NewCTR(c, iv)
+		c.Encrypt(eiv,iv)
+		c2s[i] = cipher.NewCTR(c, eiv)
 	}
 	
 	iv = []byte(ivS2C)
 	s2c := make(multiStream,3)
 	for i := range r.Array {
 		c,_ := twofish.NewCipher(r.Array[i][:])
-		s2c[i] = cipher.NewCTR(c, iv)
+		c.Encrypt(eiv,iv)
+		s2c[i] = cipher.NewCTR(c, eiv)
 	}
 	
 	return &wrapper{
@@ -99,13 +110,17 @@ func Initiator(srv io.ReadWriteCloser) (io.ReadWriteCloser,error){
 	},nil
 }
 
+/* Intermediate station function to start a session.
+If an error is returned, please close the connections, otherwise, don't. */
 func Intermediate(clt io.ReadWriteCloser,srv io.ReadWriteCloser) error{
 	const (
 		SALT = iota
+		SALT2
 		CLTK
 		SRVK
-		N_Ts
+		N_Ts /* Number of t-Keys */
 	)
+	
 	var t [N_Ts][32]byte
 	var K [2][32]byte
 	var r CryptoRecord
@@ -128,7 +143,7 @@ func Intermediate(clt io.ReadWriteCloser,srv io.ReadWriteCloser) error{
 	/* Scramble B and X */
 	
 	curve25519.ScalarMult(&(r.Array[0]),&(t[SALT]),&(r.Array[0]))
-	curve25519.ScalarMult(&(r.Array[2]),&(t[SALT]),&(r.Array[2]))
+	curve25519.ScalarMult(&(r.Array[2]),&(t[SALT2]),&(r.Array[2]))
 	
 	e = binary.Write(srv,binary.BigEndian,r)
 	if e!=nil { return e }
@@ -147,7 +162,7 @@ func Intermediate(clt io.ReadWriteCloser,srv io.ReadWriteCloser) error{
 	/* Scramble B and X */
 	
 	curve25519.ScalarMult(&(r.Array[1]),&(t[SALT]),&(r.Array[1]))
-	curve25519.ScalarMult(&(r.Array[2]),&(t[SALT]),&(r.Array[2]))
+	curve25519.ScalarMult(&(r.Array[2]),&(t[SALT2]),&(r.Array[2]))
 	
 	e = binary.Write(clt,binary.BigEndian,r)
 	if e!=nil { return e }
@@ -159,17 +174,20 @@ func Intermediate(clt io.ReadWriteCloser,srv io.ReadWriteCloser) error{
 	/* Apply Transcryption (A and C) */
 	
 	iv := []byte(ivC2S)
+	eiv := make([]byte,16)
 	c2s := make(multiStream,2)
 	for i := range K {
 		c,_ := twofish.NewCipher(K[i][:])
-		c2s[i] = cipher.NewCTR(c, iv)
+		c.Encrypt(eiv,iv)
+		c2s[i] = cipher.NewCTR(c, eiv)
 	}
 	
 	s2c := make(multiStream,2)
 	iv = []byte(ivS2C)
 	for i := range K {
 		c,_ := twofish.NewCipher(K[i][:])
-		s2c[i] = cipher.NewCTR(c, iv)
+		c.Encrypt(eiv,iv)
+		s2c[i] = cipher.NewCTR(c, eiv)
 	}
 	
 	eclt := cipher.StreamReader{c2s,clt}
@@ -180,6 +198,7 @@ func Intermediate(clt io.ReadWriteCloser,srv io.ReadWriteCloser) error{
 	return nil
 }
 
+/* Server side function to start a session. */
 func Endpt(clt io.ReadWriteCloser) (io.ReadWriteCloser,error) {
 	var t [3][32]byte
 	var r,r2 CryptoRecord
@@ -199,17 +218,20 @@ func Endpt(clt io.ReadWriteCloser) (io.ReadWriteCloser,error) {
 	//-------------------------------------------------------
 	
 	iv := []byte(ivC2S)
+	eiv := make([]byte,16)
 	c2s := make(multiStream,3)
 	for i := range r.Array {
 		c,_ := twofish.NewCipher(r.Array[i][:])
-		c2s[i] = cipher.NewCTR(c, iv)
+		c.Encrypt(eiv,iv)
+		c2s[i] = cipher.NewCTR(c, eiv)
 	}
 	
 	iv = []byte(ivS2C)
 	s2c := make(multiStream,3)
 	for i := range r.Array {
 		c,_ := twofish.NewCipher(r.Array[i][:])
-		s2c[i] = cipher.NewCTR(c, iv)
+		c.Encrypt(eiv,iv)
+		s2c[i] = cipher.NewCTR(c, eiv)
 	}
 	
 	return &wrapper{
