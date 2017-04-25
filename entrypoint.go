@@ -27,15 +27,8 @@ package sshproxy
 
 import "golang.org/x/crypto/ssh"
 
-var AllowInsecure = false
-
 func channel(nc ssh.NewChannel){
-	if AllowInsecure {
-		switch(nc.ChannelType()){
-		case any_req1:  ch_anyproto1(nc)
-		case dns_req1: ch_dns1(nc)
-		}
-	}else{
+	{
 		switch(nc.ChannelType()){
 		case any_req1:  ch_anyproto1(nc)
 		}
