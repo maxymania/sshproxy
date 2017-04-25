@@ -25,7 +25,6 @@ SOFTWARE.
 
 package sshproxy
 
-import "bytes"
 import "encoding/binary"
 import "golang.org/x/crypto/ssh"
 import "net"
@@ -34,15 +33,8 @@ import "errors"
 import "io"
 import "time"
 
-import "github.com/maxymania/sshproxy/scrambler"
 import "github.com/maxymania/sshproxy/anyproto"
 
-const conn_req2 = "connrequestv2"
-
-type connRequest2 struct{
-	Hotness uint8
-	Level   uint8
-}
 
 type connHdr2S struct{
 	Port uint16
@@ -50,101 +42,6 @@ type connHdr2S struct{
 	IP [16]byte
 }
 
-func ch_connect2(nc ssh.NewChannel){
-	var cr connRequest2
-	
-	e := binary.Read(bytes.NewReader(nc.ExtraData()), binary.BigEndian,&cr)
-	if e!=nil {
-		log.Println("binary.Read",e)
-		nc.Reject(ssh.ConnectionFailed,"Fail!")
-		return
-	}
-	if cr.Hotness<cr.Level {
-		cr.Hotness++
-		buf := new(bytes.Buffer)
-		e = binary.Write(buf,binary.BigEndian,cr)
-		if e!=nil {
-			log.Println("binary.Write",e)
-			nc.Reject(ssh.ConnectionFailed,"Fail!")
-			return
-		}
-		
-		b := buf.Bytes()
-		cl := selClient()
-		if cl==nil {
-			log.Println("No Client")
-			nc.Reject(ssh.ConnectionFailed,"Fail!")
-			return
-		}
-		ch,rq,e := cl.open(conn_req2,b)
-		if e!=nil {
-			log.Println("cl.open",conn_req2,e)
-			nc.Reject(ssh.ConnectionFailed,"Fail!")
-			return
-		}
-		go DevNullRequest(rq)
-		
-		ch2,rq2,e := nc.Accept()
-		
-		if e!=nil {
-			log.Println("nc.Accept",e)
-			ch.Close()
-			return
-		}
-		go DevNullRequest(rq2)
-		
-		e = scrambler.Intermediate(ch2,ch)
-		
-		if e!=nil {
-			log.Println("scrambler.Intermediate",e)
-			ch.Close()
-			ch2.Close()
-		}
-		return
-	}
-	
-	ch2,rq2,e := nc.Accept()
-	
-	if e!=nil {
-		log.Println("nc.Accept",e)
-		return
-	}
-	go DevNullRequest(rq2)
-	
-	ech2,e := scrambler.Endpt(ch2)
-	if e!=nil {
-		log.Println("scrambler.Endpt",e)
-		return
-	}
-	
-	var cx connHdr2S
-	
-	e = binary.Read(ech2, binary.BigEndian,&cx)
-	if e!=nil {
-		log.Println("binary.Read",e)
-		ch2.Close()
-		return
-	}
-	
-	if cx.T>16 { cx.T = 16 }
-	
-	var coadr net.TCPAddr
-	
-	coadr.IP = net.IP(cx.IP[:cx.T])
-	coadr.Port = int(cx.Port)
-	
-	conn,err := net.DialTCP("tcp",nil,&coadr)
-	if err!=nil {
-		log.Println("net.DialTCP",err)
-		ech2.Write([]byte{0xff})
-		ech2.Close()
-		return
-	}
-	ech2.Write([]byte{0})
-	
-	go ch_proxy_copyin2(conn,ech2,ch2)
-	go ch_proxy_copyout2(ech2,conn)
-}
 
 func ap1_connect(ech2 io.ReadWriteCloser, ch2 ssh.Channel){
 	var cx connHdr2S
@@ -231,61 +128,3 @@ func Dial(netw, addr string) (net.Conn,error) {
 	
 	return &myconn2{ech,ech,ech,lo,rm},nil
 }
-
-/* Old, 'less secure' connect. */
-func Old2Dial(netw, addr string) (net.Conn,error) {
-	var cr connRequest2
-	var cx connHdr2S
-	
-	if !AllowInsecure { return nil, errors.New("Insecure Operation") }
-	
-	rm,e := net.ResolveTCPAddr(netw,addr)
-	if e!=nil { return nil,e }
-	
-	IPb := []byte(rm.IP)
-	cx.T = uint8(len(IPb))
-	cx.Port = uint16(rm.Port)
-	copy(cx.IP[:],IPb)
-	
-	cr.Hotness = 1
-	cr.Level = uint8(Level)
-	
-	buf := new(bytes.Buffer)
-	binary.Write(buf,binary.BigEndian,cr)
-	
-	cl := selClient()
-	if cl==nil { return nil,errors.New("No Client") }
-	ch,rq,e := cl.open(conn_req2,buf.Bytes()) /* send connRequest2 */
-	if e!=nil {
-		log.Println("Dial2: cl.open",e)
-		return nil,e
-	}
-	go DevNullRequest(rq)
-	
-	ech,e := scrambler.Initiator(ch)
-	if e!=nil {
-		log.Println("Dial2: scrambler.Initiator",e)
-		ch.Close()
-		return nil,e
-	}
-	
-	e = binary.Write(ech,binary.BigEndian,cx)
-	if e!=nil {
-		log.Println("Dial2: binary.Write",e)
-		ech.Close()
-		return nil,e
-	}
-	
-	resp := []byte{0}
-	
-	_,e = ech.Read(resp)
-	if e!=nil { return nil,e }
-	if resp[0]!=0 {
-		return nil,errors.New("Connection failed!")
-	}
-	
-	lo,_ := net.ResolveTCPAddr("tcp","localhost:54321")
-	
-	return &myconn2{ech,ech,ch,lo,rm},nil
-}
-

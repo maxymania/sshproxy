@@ -52,6 +52,16 @@ type anyprotocol1 struct{
 	Level   uint8
 }
 
+/*
+Hotness:
+	0 = This level exist on the originating client.
+	1 = If the request reaches the first proxy. (Direct proxy, no mix).
+	2 = First proxy-indirection
+	3 = Second proxy-indirection
+	4 = Third proxy-indirection
+	...
+*/
+
 func ch_anyproto1(nc ssh.NewChannel){
 	var cr anyprotocol1
 	
