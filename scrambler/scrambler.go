@@ -73,6 +73,11 @@ func encryptIV(key, ivi, ivo []byte){
 	copy(ivo,out[:])
 }
 
+func mustChaCha(c *chacha20.Cipher,e error) *chacha20.Cipher {
+	if e!=nil { panic(e) }
+	return c
+}
+
 /* Client side function to start a session. */
 func Initiator(srv io.ReadWriteCloser) (io.ReadWriteCloser,error){
 	var t [3][32]byte
@@ -99,14 +104,14 @@ func Initiator(srv io.ReadWriteCloser) (io.ReadWriteCloser,error){
 	c2s := make(multiStream,3)
 	for i := range r.Array {
 		encryptIV(r.Array[i][:],iv,eiv)
-		c2s[i],_ = chacha20.NewCipher(r.Array[i][:],eiv)
+		c2s[i] = mustChaCha(chacha20.NewCipher(r.Array[i][:],eiv))
 	}
 	
 	iv = []byte(ivS2C)
 	s2c := make(multiStream,3)
 	for i := range r.Array {
 		encryptIV(r.Array[i][:],iv,eiv)
-		s2c[i],_ = chacha20.NewCipher(r.Array[i][:],eiv)
+		s2c[i] = mustChaCha(chacha20.NewCipher(r.Array[i][:],eiv))
 	}
 	
 	return &wrapper{
@@ -186,14 +191,14 @@ func Intermediate(clt io.ReadWriteCloser,srv io.ReadWriteCloser) error{
 	c2s := make(multiStream,2)
 	for i := range K {
 		encryptIV(K[i][:],iv,eiv)
-		c2s[i],_ = chacha20.NewCipher(K[i][:],eiv)
+		c2s[i] = mustChaCha(chacha20.NewCipher(K[i][:],eiv))
 	}
 	
 	s2c := make(multiStream,2)
 	iv = []byte(ivS2C)
 	for i := range K {
 		encryptIV(K[i][:],iv,eiv)
-		s2c[i],_ = chacha20.NewCipher(K[i][:],eiv)
+		s2c[i] = mustChaCha(chacha20.NewCipher(K[i][:],eiv))
 	}
 	
 	eclt := cipher.StreamReader{c2s,clt}
@@ -224,18 +229,18 @@ func Endpt(clt io.ReadWriteCloser) (io.ReadWriteCloser,error) {
 	//-------------------------------------------------------
 	
 	iv := []byte(ivC2S)
-	eiv := make([]byte,16)
+	eiv := make([]byte,24)
 	c2s := make(multiStream,3)
 	for i := range r.Array {
 		encryptIV(r.Array[i][:],iv,eiv)
-		c2s[i],_ = chacha20.NewCipher(r.Array[i][:],eiv)
+		c2s[i] = mustChaCha(chacha20.NewCipher(r.Array[i][:],eiv))
 	}
 	
 	iv = []byte(ivS2C)
 	s2c := make(multiStream,3)
 	for i := range r.Array {
 		encryptIV(r.Array[i][:],iv,eiv)
-		s2c[i],_ = chacha20.NewCipher(r.Array[i][:],eiv)
+		s2c[i] = mustChaCha(chacha20.NewCipher(r.Array[i][:],eiv))
 	}
 	
 	return &wrapper{
