@@ -36,7 +36,8 @@ package scrambler
 import "io"
 import "encoding/binary"
 import "golang.org/x/crypto/curve25519"
-import "golang.org/x/crypto/twofish"
+//import "golang.org/x/crypto/twofish"
+import "git.schwanenlied.me/yawning/chacha20.git"
 import "crypto/rand"
 import "crypto/cipher"
 import "fmt"
@@ -65,6 +66,14 @@ func (w *wrapper) Close() error{
 	return w.C.Close()
 }
 
+func encryptIV(key, ivi, ivo []byte){
+	var out [32]byte
+	var nonce [chacha20.HNonceSize]byte
+	copy(nonce[:],ivi)
+	chacha20.HChaCha(key,&nonce,&out)
+	copy(ivo,out[:])
+}
+
 /* Client side function to start a session. */
 func Initiator(srv io.ReadWriteCloser) (io.ReadWriteCloser,error){
 	var t [3][32]byte
@@ -87,20 +96,24 @@ func Initiator(srv io.ReadWriteCloser) (io.ReadWriteCloser,error){
 	//------------------------------------------------------------
 	
 	iv := []byte(ivC2S)
-	eiv := make([]byte,16)
+	eiv := make([]byte,24)
 	c2s := make(multiStream,3)
 	for i := range r.Array {
-		c,_ := twofish.NewCipher(r.Array[i][:])
-		c.Encrypt(eiv,iv)
-		c2s[i] = cipher.NewCTR(c, eiv)
+		//c,_ := twofish.NewCipher(r.Array[i][:])
+		//c.Encrypt(eiv,iv)
+		encryptIV(r.Array[i][:],iv,eiv)
+		//c2s[i] = cipher.NewCTR(c, eiv)
+		c2s[i],_ = chacha20.NewCipher(r.Array[i][:],eiv)
 	}
 	
 	iv = []byte(ivS2C)
 	s2c := make(multiStream,3)
 	for i := range r.Array {
-		c,_ := twofish.NewCipher(r.Array[i][:])
-		c.Encrypt(eiv,iv)
-		s2c[i] = cipher.NewCTR(c, eiv)
+		//c,_ := twofish.NewCipher(r.Array[i][:])
+		//c.Encrypt(eiv,iv)
+		encryptIV(r.Array[i][:],iv,eiv)
+		//s2c[i] = cipher.NewCTR(c, eiv)
+		s2c[i],_ = chacha20.NewCipher(r.Array[i][:],eiv)
 	}
 	
 	return &wrapper{
@@ -176,20 +189,24 @@ func Intermediate(clt io.ReadWriteCloser,srv io.ReadWriteCloser) error{
 	/* Apply Transcryption (A and C) */
 	
 	iv := []byte(ivC2S)
-	eiv := make([]byte,16)
+	eiv := make([]byte,24)
 	c2s := make(multiStream,2)
 	for i := range K {
-		c,_ := twofish.NewCipher(K[i][:])
-		c.Encrypt(eiv,iv)
-		c2s[i] = cipher.NewCTR(c, eiv)
+		//c,_ := twofish.NewCipher(K[i][:])
+		//c.Encrypt(eiv,iv)
+		encryptIV(K[i][:],iv,eiv)
+		//c2s[i] = cipher.NewCTR(c, eiv)
+		c2s[i],_ = chacha20.NewCipher(K[i][:],eiv)
 	}
 	
 	s2c := make(multiStream,2)
 	iv = []byte(ivS2C)
 	for i := range K {
-		c,_ := twofish.NewCipher(K[i][:])
-		c.Encrypt(eiv,iv)
-		s2c[i] = cipher.NewCTR(c, eiv)
+		//c,_ := twofish.NewCipher(K[i][:])
+		//c.Encrypt(eiv,iv)
+		encryptIV(K[i][:],iv,eiv)
+		//s2c[i] = cipher.NewCTR(c, eiv)
+		s2c[i],_ = chacha20.NewCipher(K[i][:],eiv)
 	}
 	
 	eclt := cipher.StreamReader{c2s,clt}
@@ -223,17 +240,21 @@ func Endpt(clt io.ReadWriteCloser) (io.ReadWriteCloser,error) {
 	eiv := make([]byte,16)
 	c2s := make(multiStream,3)
 	for i := range r.Array {
-		c,_ := twofish.NewCipher(r.Array[i][:])
-		c.Encrypt(eiv,iv)
-		c2s[i] = cipher.NewCTR(c, eiv)
+		//c,_ := twofish.NewCipher(r.Array[i][:])
+		//c.Encrypt(eiv,iv)
+		encryptIV(r.Array[i][:],iv,eiv)
+		//c2s[i] = cipher.NewCTR(c, eiv)
+		c2s[i],_ = chacha20.NewCipher(r.Array[i][:],eiv)
 	}
 	
 	iv = []byte(ivS2C)
 	s2c := make(multiStream,3)
 	for i := range r.Array {
-		c,_ := twofish.NewCipher(r.Array[i][:])
-		c.Encrypt(eiv,iv)
-		s2c[i] = cipher.NewCTR(c, eiv)
+		//c,_ := twofish.NewCipher(r.Array[i][:])
+		//c.Encrypt(eiv,iv)
+		encryptIV(r.Array[i][:],iv,eiv)
+		//s2c[i] = cipher.NewCTR(c, eiv)
+		s2c[i],_ = chacha20.NewCipher(r.Array[i][:],eiv)
 	}
 	
 	return &wrapper{
