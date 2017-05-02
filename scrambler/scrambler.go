@@ -36,7 +36,6 @@ package scrambler
 import "io"
 import "encoding/binary"
 import "golang.org/x/crypto/curve25519"
-//import "golang.org/x/crypto/twofish"
 import "git.schwanenlied.me/yawning/chacha20.git"
 import "crypto/rand"
 import "crypto/cipher"
@@ -99,20 +98,14 @@ func Initiator(srv io.ReadWriteCloser) (io.ReadWriteCloser,error){
 	eiv := make([]byte,24)
 	c2s := make(multiStream,3)
 	for i := range r.Array {
-		//c,_ := twofish.NewCipher(r.Array[i][:])
-		//c.Encrypt(eiv,iv)
 		encryptIV(r.Array[i][:],iv,eiv)
-		//c2s[i] = cipher.NewCTR(c, eiv)
 		c2s[i],_ = chacha20.NewCipher(r.Array[i][:],eiv)
 	}
 	
 	iv = []byte(ivS2C)
 	s2c := make(multiStream,3)
 	for i := range r.Array {
-		//c,_ := twofish.NewCipher(r.Array[i][:])
-		//c.Encrypt(eiv,iv)
 		encryptIV(r.Array[i][:],iv,eiv)
-		//s2c[i] = cipher.NewCTR(c, eiv)
 		s2c[i],_ = chacha20.NewCipher(r.Array[i][:],eiv)
 	}
 	
@@ -192,20 +185,14 @@ func Intermediate(clt io.ReadWriteCloser,srv io.ReadWriteCloser) error{
 	eiv := make([]byte,24)
 	c2s := make(multiStream,2)
 	for i := range K {
-		//c,_ := twofish.NewCipher(K[i][:])
-		//c.Encrypt(eiv,iv)
 		encryptIV(K[i][:],iv,eiv)
-		//c2s[i] = cipher.NewCTR(c, eiv)
 		c2s[i],_ = chacha20.NewCipher(K[i][:],eiv)
 	}
 	
 	s2c := make(multiStream,2)
 	iv = []byte(ivS2C)
 	for i := range K {
-		//c,_ := twofish.NewCipher(K[i][:])
-		//c.Encrypt(eiv,iv)
 		encryptIV(K[i][:],iv,eiv)
-		//s2c[i] = cipher.NewCTR(c, eiv)
 		s2c[i],_ = chacha20.NewCipher(K[i][:],eiv)
 	}
 	
@@ -240,20 +227,14 @@ func Endpt(clt io.ReadWriteCloser) (io.ReadWriteCloser,error) {
 	eiv := make([]byte,16)
 	c2s := make(multiStream,3)
 	for i := range r.Array {
-		//c,_ := twofish.NewCipher(r.Array[i][:])
-		//c.Encrypt(eiv,iv)
 		encryptIV(r.Array[i][:],iv,eiv)
-		//c2s[i] = cipher.NewCTR(c, eiv)
 		c2s[i],_ = chacha20.NewCipher(r.Array[i][:],eiv)
 	}
 	
 	iv = []byte(ivS2C)
 	s2c := make(multiStream,3)
 	for i := range r.Array {
-		//c,_ := twofish.NewCipher(r.Array[i][:])
-		//c.Encrypt(eiv,iv)
 		encryptIV(r.Array[i][:],iv,eiv)
-		//s2c[i] = cipher.NewCTR(c, eiv)
 		s2c[i],_ = chacha20.NewCipher(r.Array[i][:],eiv)
 	}
 	
